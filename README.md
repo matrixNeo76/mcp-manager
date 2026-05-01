@@ -188,6 +188,7 @@ uv run python scripts/smoke_test.py
 |----------|---------|-------------|
 | `GITHUB_TOKEN` | — | GitHub API token (5,000 req/h instead of 60) |
 | `GITHUB_TIMEOUT` | 15 | GitHub API timeout in seconds |
+| `GITHUB_CACHE_TTL` | 300 | GitHub API cache TTL in seconds (default: 5 min) |
 | `REGISTRY_TIMEOUT` | 30 | MCP Registry API timeout in seconds |
 | `REGISTRY_API_VERSION` | v0.1 | Registry API version (future-proof) |
 | `MCP_CONFIG_PATH` | — | Override `.mcp.json` location |

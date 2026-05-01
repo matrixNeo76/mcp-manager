@@ -292,6 +292,7 @@ async def gen_config(
   server_name: str,
   server_label: str = "",
   dry_run: bool = True,
+  prefer_remote: bool = False,
 ) -> dict[str, Any]:
   """Generate an .mcp.json entry from a registry server's metadata."""
   detail = get_server_detail(server_name)
@@ -581,6 +582,7 @@ async def pi_caps() -> str:
 def main() -> None:
   """Entry point for mcp-manager."""
   parser = argparse.ArgumentParser(
+    prog="mcp-manager",
     description="MCP Manager — discover, evaluate, and manage MCP servers",
   )
   parser.add_argument(
@@ -589,20 +591,26 @@ def main() -> None:
   )
   parser.add_argument(
     "--http", action="store_true",
-    help="Run as HTTP server instead of stdio (default: stdio)",
+    help="Run as SSE HTTP server (experimental — requires uvicorn)",
   )
   parser.add_argument(
-    "--port", type=int, default=8000,
+    "--port", metavar="PORT", type=int, default=8000,
     help="HTTP port (default: 8000)",
   )
   parser.add_argument(
-    "--host", type=str, default="127.0.0.1",
+    "--host", metavar="HOST", type=str, default="127.0.0.1",
     help="HTTP host (default: 127.0.0.1)",
   )
   args = parser.parse_args()
 
   if args.http:
-    server.run(host=args.host, port=args.port)
+    # Note: HTTP mode requires the server to be reconstructed with host/port
+    # Tools are registered on the global 'server' FastMCP instance (stdio mode).
+    # For full HTTP support, create a new FastMCP with host=args.host, port=args.port
+    # and register all tools again, or use a reverse proxy.
+    print("HTTP mode requires additional setup — use stdio mode or a proxy.")
+    print(f"  python -m mcp_manager  # stdio mode (default)")
+    parser.exit(1)
   else:
     server.run()
 

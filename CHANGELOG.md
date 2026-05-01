@@ -5,6 +5,30 @@ All notable changes to MCP Manager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-05-02
+
+### Added
+- CLI flags: `--version`, `--http`, `--port`, `--host` via argparse
+- GitHub Actions CI: Python 3.12 + 3.13 matrix
+- `GITHUB_CACHE_TTL` env var for configurable cache
+- `X-RateLimit-Reset` tracking (resets_in_minutes in rate limit warnings)
+- `__main__.py` for `python -m mcp_manager` support
+- `.gitattributes` for consistent LF line endings
+
+### Fixed
+- W1: `prefer_remote` parameter added to `generate_mcp_config` signature
+- W2: `--help` now shows `mcp-manager` instead of `__main__.py`
+- W3: `--http` mode documented as experimental (proper SSE transport support planned)
+
+### Changed
+- Version bumped to 0.4.0
+- `write_mcp_config_entry` now uses `ensure_ascii=True` for safe JSON
+- Rate limit warnings include reset time ("Resetta tra ~Xmin")
+- Line endings normalized via `.gitattributes` (LF)
+
+### Documentation
+- README: added `GITHUB_CACHE_TTL` to env vars table
+
 ## [0.3.0] — 2026-05-02
 
 ### Added
