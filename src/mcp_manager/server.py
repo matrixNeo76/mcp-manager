@@ -7,6 +7,7 @@ Tools:
   get_server_details      — Detailed info about a registry server
   assess_trustworthiness  — Evaluate a GitHub repo's trust score
   search_with_trust       — Search + trust evaluation combined
+  search_useful_mcp       — [NEW] Search + trust + redundancy filter + value classification
   compare_alternatives    — Compare multiple servers for a task
   audit_workspace_mcp     — Full audit of local MCP setup
   generate_mcp_config     — Generate .mcp.json entry from a registry server
@@ -17,6 +18,12 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp_manager.utils.capabilities import (
+    compute_redundancy,
+    classify_value,
+    compute_composite_score,
+    get_redundancy_help,
+)
 from mcp_manager.utils.config import list_local_servers, write_mcp_config_entry
 from mcp_manager.utils.github import fetch_repo_info, compute_trust_score
 from mcp_manager.utils.registry import (
@@ -31,7 +38,9 @@ from mcp_manager.utils.registry import (
 server = FastMCP(
     name="mcp-manager",
     instructions="Discover, evaluate, and manage MCP servers from the official registry. "
-    "Use me to inspect local MCP config, search the registry, evaluate trust, and recommend additions.",
+    "Use me to inspect local MCP config, search the registry, evaluate trust, "
+    "and recommend additions. I understand which capabilities pi has built-in "
+    "so I can filter out redundant MCP servers.",
 )
 
 
@@ -112,13 +121,14 @@ async def trust_assessment(
     }
 
 
-# ============================ MICROFASE 6 ===================================
+# ============================ MICROFASE 6 (aggiornata) ======================
 
 @server.tool(
     name="search_with_trust",
     description="Search the MCP Registry AND evaluate trust for each result. "
     "Returns servers ranked by trust score, with GitHub stats. "
-    "Servers without a GitHub repository get trust_score = 0.",
+    "Servers without a GitHub repository get trust_score = 0. "
+    "Also includes redundancy and composite scores.",
 )
 async def search_trusted(
     query: str,
@@ -126,12 +136,24 @@ async def search_trusted(
     min_stars: int = 10,
     filter_untrusted: bool = False,
 ) -> list[dict[str, Any]]:
-    """Search registry and evaluate trust for each result."""
+    """Search registry and evaluate trust + redundancy for each result."""
     servers = registry_list(search=query, limit=limit, version="latest")
+    return _enrich_with_scores(servers, min_stars, filter_untrusted)
 
+
+def _enrich_with_scores(
+    servers: list[dict],
+    min_stars: int = 10,
+    filter_untrusted: bool = False,
+) -> list[dict[str, Any]]:
+    """Enrich registry servers with trust, redundancy, value, and composite scores."""
     results = []
     for sv in servers:
         entry: dict[str, Any] = {**sv}
+        name = sv.get("name", "")
+        desc = sv.get("description", "")
+
+        # 1) Trust score
         repo_url = sv.get("repository_url")
         if repo_url:
             repo_info = fetch_repo_info(repo_url)
@@ -141,27 +163,75 @@ async def search_trusted(
             entry["days_since_update"] = repo_info.get("days_since_update", 9999)
             if repo_info["found"]:
                 score = compute_trust_score(repo_info, min_stars=min_stars)
-                entry["trust_score"] = score["trust_score"]
+                trust_score = score["trust_score"]
+                entry["trust_score"] = trust_score
                 entry["is_trusted"] = score["is_trusted"]
                 entry["trust_warnings"] = score["warnings"]
             else:
+                trust_score = 0
                 entry["trust_score"] = 0
                 entry["is_trusted"] = False
                 entry["trust_warnings"] = [repo_info.get("error", "Unknown error")]
         else:
+            trust_score = 0
             entry["trust_score"] = 0
             entry["is_trusted"] = False
             entry["trust_warnings"] = ["No GitHub repository URL in registry"]
 
+        # 2) Redundancy & value scores
+        redundancy = compute_redundancy(name, desc)
+        value = classify_value(name, desc)
+        entry["redundancy_score"] = redundancy["redundancy_score"]
+        entry["redundant"] = redundancy["redundant"]
+        entry["redundant_category"] = redundancy["redundant_category"]
+        entry["redundant_reason"] = redundancy["redundant_reason"]
+        entry["value_type"] = value["value_type"]
+        entry["value_score"] = value["value_score"]
+        entry["value_label"] = value["value_label"]
+        entry["value_match_confidence"] = value["value_match_confidence"]
+
+        # 3) Composite score
+        entry["composite_score"] = compute_composite_score(
+            trust_score=trust_score,
+            redundancy_score=redundancy["redundancy_score"],
+            value_score=value["value_score"],
+        )
+
         results.append(entry)
 
-    # Sort by trust_score descending
-    results.sort(key=lambda x: x.get("trust_score", 0), reverse=True)
+    # Sort by composite_score descending
+    results.sort(key=lambda x: x.get("composite_score", 0), reverse=True)
 
     if filter_untrusted:
         results = [r for r in results if r.get("is_trusted", False)]
 
     return results
+
+
+# ============================ MICROFASE 5 (NEW) =============================
+
+@server.tool(
+    name="search_useful_mcp",
+    description="Cerca MCP server che aggiungono VALORE REALE a pi/Craft Agents, "
+    "escludendo automaticamente quelli ridondanti (filesystem, browser, shell, search...). "
+    "Ogni risultato include: trust score, redundancy check, value classification, "
+    "e composite score per un ranking intelligente.",
+)
+async def search_useful(
+    query: str,
+    limit: int = 20,
+    min_stars: int = 10,
+    filter_untrusted: bool = True,
+    include_redundant: bool = False,
+) -> list[dict[str, Any]]:
+    """Search for MCP servers that add real value beyond pi's built-in capabilities."""
+    servers = registry_list(search=query, limit=limit, version="latest")
+    enriched = _enrich_with_scores(servers, min_stars, filter_untrusted)
+
+    if not include_redundant:
+        enriched = [e for e in enriched if not e.get("redundant", False)]
+
+    return enriched
 
 
 # ============================ MICROFASE 7 ===================================
@@ -216,17 +286,13 @@ async def gen_config(
                     "command": "npx",
                     "args": ["-y", identifier],
                 }
-
-            # Add required environment variables from the package definition
             entry["env"] = {}
         else:
-            # Streamable HTTP or SSE
             entry = {
                 "command": "npx",
                 "args": ["-y", stdio_pkg.get("identifier", "")],
             }
     elif remotes:
-        # Remote server (streamable HTTP or SSE) — suggest URL-based config
         entry = {
             "url": remotes[0].get("url", ""),
             "type": remotes[0].get("type", "streamable-http"),
@@ -241,12 +307,12 @@ async def gen_config(
     )
 
 
-# ============================ MICROFASE 8 ===================================
+# ============================ MICROFASE 8 (aggiornata) ======================
 
 @server.tool(
     name="compare_alternatives",
     description="Search for alternative MCP servers and compare them side by side. "
-    "Includes trust scores, GitHub stats, descriptions, and versions. "
+    "Includes trust scores, redundancy check, value classification, composite score. "
     "Optionally include a local server name as baseline for comparison.",
 )
 async def compare_alternatives(
@@ -255,33 +321,30 @@ async def compare_alternatives(
     limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Find and compare alternative MCP servers for a given task."""
-    results = await search_trusted(
-        query=query, limit=limit, min_stars=5, filter_untrusted=False
+    results = await search_useful(
+        query=query, limit=limit, min_stars=5, filter_untrusted=False, include_redundant=True
     )
 
-    # If a local server name is provided, try to find it in the list
     if local_server_name:
-        local_match = None
         for r in results:
             if local_server_name.lower() in r.get("name", "").lower():
-                local_match = r
+                r["is_current"] = True
                 break
-        if local_match:
-            local_match["is_current"] = True
 
     return results
 
 
-# ============================ MICROFASE 9 ===================================
+# ============================ MICROFASE 9 (aggiornata) ======================
 
 @server.tool(
     name="audit_workspace_mcp",
     description="Perform a comprehensive audit of the local MCP configuration. "
     "Checks each installed server against the registry, evaluates trust scores, "
-    "detects outdated versions, and provides actionable recommendations.",
+    "detects redundant servers (duplicating pi built-ins), "
+    "and provides actionable recommendations.",
 )
 async def audit_workspace() -> dict[str, Any]:
-    """Full audit of local MCP servers vs registry."""
+    """Full audit of local MCP servers vs registry + pi built-in capabilities."""
     local = list_local_servers()
     if not local:
         return {
@@ -289,7 +352,7 @@ async def audit_workspace() -> dict[str, Any]:
             "message": "No MCP servers configured. Use search_registry to find servers to add.",
         }
 
-    registry_health = check_health()
+    health = check_health()
     checked = []
     for sv in local:
         name = sv["name"]
@@ -301,10 +364,14 @@ async def audit_workspace() -> dict[str, Any]:
             "is_outdated": False,
             "trust_score": None,
             "is_trusted": None,
+            "redundant": False,
+            "redundant_reason": None,
+            "value_label": "📦 Generico",
+            "composite_score": None,
             "warnings": [],
         }
 
-        # Search registry by name
+        # 1) Check registry
         registry_results = registry_list(search=name, limit=3, version="latest")
         match = None
         for r in registry_results:
@@ -315,9 +382,22 @@ async def audit_workspace() -> dict[str, Any]:
         if match:
             entry["registry_match"] = match["name"]
             entry["registry_version"] = match["version"]
-            entry["is_outdated"] = False  # We can't reliably compare versions
 
-            # Trust evaluation
+            # 2) Redundancy check
+            red = compute_redundancy(match["name"], match.get("description", ""))
+            entry["redundant"] = red["redundant"]
+            entry["redundant_reason"] = red["redundant_reason"]
+            if red["redundant"]:
+                entry["warnings"].append(
+                    f"🔴 RIDONDANTE: {red['redundant_reason']}"
+                )
+
+            # 3) Value classification
+            val = classify_value(match["name"], match.get("description", ""))
+            entry["value_label"] = val["value_label"]
+            entry["value_score"] = val["value_score"]
+
+            # 4) Trust evaluation
             repo_url = match.get("repository_url")
             if repo_url:
                 repo_info = fetch_repo_info(repo_url)
@@ -325,6 +405,14 @@ async def audit_workspace() -> dict[str, Any]:
                     score = compute_trust_score(repo_info)
                     entry["trust_score"] = score["trust_score"]
                     entry["is_trusted"] = score["is_trusted"]
+
+                    # 5) Composite score
+                    entry["composite_score"] = compute_composite_score(
+                        trust_score=score["trust_score"],
+                        redundancy_score=red["redundancy_score"],
+                        value_score=val["value_score"],
+                    )
+
                     if score["warnings"]:
                         entry["warnings"].extend(score["warnings"])
         else:
@@ -334,13 +422,16 @@ async def audit_workspace() -> dict[str, Any]:
 
     trusted = sum(1 for c in checked if c.get("is_trusted"))
     untrusted = sum(1 for c in checked if c.get("is_trusted") is False)
+    redundant = sum(1 for c in checked if c.get("redundant"))
 
     return {
-        "registry_reachable": registry_health.get("reachable", False),
-        "registry_servers_count": registry_health.get("servers_count", 0),
+        "registry_reachable": health.get("reachable", False),
+        "registry_servers_count": health.get("servers_count", 0),
         "installed_count": len(local),
         "trusted_count": trusted,
         "untrusted_count": untrusted,
+        "redundant_count": redundant,
+        "redundant_servers": [c["local_name"] for c in checked if c.get("redundant")],
         "servers": checked,
         "recommendations": _generate_recommendations(checked),
     }
@@ -350,18 +441,23 @@ def _generate_recommendations(checked: list[dict]) -> list[str]:
     """Generate actionable recommendations from audit results."""
     recs = []
     for c in checked:
+        if c.get("redundant"):
+            recs.append(
+                f"🔴 '{c['local_name']}' è RIDONDANTE: {c['redundant_reason']}. "
+                "Puoi rimuoverlo."
+            )
         if c.get("is_trusted") is False:
             recs.append(
-                f"⚠️  '{c['local_name']}' has low trust score ({c.get('trust_score', 0)}). "
-                "Consider replacing with a more established alternative."
+                f"⚠️  '{c['local_name']}' ha trust score basso ({c.get('trust_score', 0)}). "
+                "Considera una alternativa più affidabile."
             )
         if not c.get("registry_match"):
             recs.append(
-                f"🔍 '{c['local_name']}' was not found in the MCP Registry. "
-                "It may be unpublished or use a custom name."
+                f"🔍 '{c['local_name']}' non trovato nel Registry MCP. "
+                "Potrebbe non essere pubblicato o avere un nome diverso."
             )
     if not recs:
-        recs.append("✅ All installed servers look good!")
+        recs.append("✅ Tutti i server installati sono ok!")
     return recs
 
 

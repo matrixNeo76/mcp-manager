@@ -1,0 +1,177 @@
+{
+  "_meta": {
+    "description": "Built-in capabilities of pi / Craft Agents OSS. MCP servers that duplicate these are redundant.",
+    "version": "1.0",
+    "source": "craft-agents-oss packages/session-tools-core + packages/pi-agent-server + packages/server-core"
+  },
+  "categories": {
+    "filesystem": {
+      "label": "Filesystem",
+      "builtin_tools": ["read", "write", "edit", "grep", "find", "ls"],
+      "replaces_mcp_keywords": [
+        "filesystem", "file system", "file_system", "read file", "write file",
+        "directory", "folder", "fs access", "file ops", "file operation",
+        "list files", "edit file", "read directory"
+      ],
+      "replaces_mcp_name_patterns": [
+        "filesystem", "fileops", "fs-", "-fs-", "file-system"
+      ],
+      "redundant_examples": [
+        "io.github.bytedance/mcp-server-filesystem",
+        "io.github.Digital-Defiance/mcp-filesystem"
+      ]
+    },
+    "browser": {
+      "label": "Browser Automation",
+      "builtin_tools": ["browser_tool"],
+      "replaces_mcp_keywords": [
+        "browser", "playwright", "puppeteer", "web page", "webpage",
+        "navigate", "click button", "fill form", "take screenshot",
+        "selenium", "headless", "web automation", "chromium"
+      ],
+      "replaces_mcp_name_patterns": [
+        "browser", "playwright", "puppeteer", "selenium", "chromium"
+      ],
+      "redundant_examples": [
+        "microsoft/playwright-mcp",
+        "io.github.browserbase/mcp-server-browserbase",
+        "io.github.browser-gateway/browser-gateway"
+      ]
+    },
+    "shell": {
+      "label": "Shell / Command Execution",
+      "builtin_tools": ["bash", "script_sandbox"],
+      "replaces_mcp_keywords": [
+        "terminal", "shell", "command", "bash", "exec",
+        "run command", "execute", "subprocess", "cli",
+        "cmd", "powershell", "ssh exec", "remote exec"
+      ],
+      "replaces_mcp_name_patterns": [
+        "terminal", "shell", "-exec", "subprocess"
+      ],
+      "redundant_examples": [
+        "io.github.RipperMercs/terminalfeed",
+        "io.github.WillNigri/crowterminal"
+      ]
+    },
+    "search_web": {
+      "label": "Web Search and Fetch",
+      "builtin_tools": ["web_search", "web_fetch"],
+      "replaces_mcp_keywords": [
+        "web search", "search web", "internet search", "search engine",
+        "google search", "bing search", "web fetch", "scrape",
+        "web scraper", "crawl", "web crawl", "url fetcher"
+      ],
+      "replaces_mcp_name_patterns": [
+        "scrape", "crawl", "web-fetch", "websearch"
+      ],
+      "redundant_examples": [
+        "io.github.brave/brave-search-mcp-server"
+      ]
+    },
+    "ai_llm": {
+      "label": "AI / LLM",
+      "builtin_tools": ["call_llm", "spawn_session"],
+      "replaces_mcp_keywords": [
+        "llm call", "ai completion", "chat completion",
+        "openai api", "anthropic api", "model call",
+        "ai model", "llm provider"
+      ],
+      "replaces_mcp_name_patterns": [
+        "openai", "anthropic", "llm-proxy", "ai-gateway"
+      ],
+      "redundant_examples": []
+    },
+    "memory_storage": {
+      "label": "Memory and Persistence",
+      "builtin_sources": ["memory (craft-memory)"],
+      "builtin_tools": ["remember", "search_memory", "get_recent_memory", "upsert_fact", "list_open_loops"],
+      "replaces_mcp_keywords": [
+        "memory", "persistent storage", "sqlite memory",
+        "session memory", "knowledge graph",
+        "fts5", "full text search"
+      ],
+      "replaces_mcp_name_patterns": [
+        "memory", "persist", "knowledge-graph"
+      ],
+      "redundant_examples": [
+        "com.letta/memory-mcp",
+        "ai.smithery/neverinfamous-memory-journal-mcp"
+      ]
+    },
+    "code_analysis": {
+      "label": "Code Analysis",
+      "builtin_tools": ["grep", "find"],
+      "replaces_mcp_keywords": [
+        "code search", "grep", "code analysis", "static analysis",
+        "codebase search", "semantic code search",
+        "code insight", "code understanding"
+      ],
+      "replaces_mcp_name_patterns": [
+        "code-search", "codesearch", "grep-"
+      ],
+      "redundant_examples": []
+    },
+    "data_transform": {
+      "label": "Data Transform",
+      "builtin_tools": ["transform_data"],
+      "replaces_mcp_keywords": [
+        "data transform", "data conversion", "csv to json",
+        "json transform", "data processing"
+      ],
+      "replaces_mcp_name_patterns": [
+        "data-transform", "csv-"
+      ],
+      "redundant_examples": []
+    },
+    "skills_mcp_management": {
+      "label": "Skills and MCP Management",
+      "builtin_sources": ["skillsmp", "mcp-manager"],
+      "builtin_tools": ["skillsmp_search", "skillsmp_ai_search", "mcp-manager_*"],
+      "replaces_mcp_keywords": [
+        "skill discovery", "mcp registry", "find mcp",
+        "search mcp", "mcp search", "skill search"
+      ],
+      "replaces_mcp_name_patterns": [
+        "skill-", "mcp-search", "registry"
+      ],
+      "redundant_examples": [
+        "ai.com.mcp/skills-search"
+      ]
+    },
+    "session_orchestration": {
+      "label": "Session Orchestration",
+      "builtin_tools": ["spawn_session", "send_agent_message", "list_sessions", "get_session_info"],
+      "replaces_mcp_keywords": [
+        "multi-agent", "agent orchestration", "agent coordination",
+        "session management", "parallel agent"
+      ],
+      "replaces_mcp_name_patterns": [
+        "orchestrat", "multi-agent"
+      ],
+      "redundant_examples": []
+    },
+    "messaging": {
+      "label": "Messaging",
+      "builtin_tools": ["list_messaging_channels", "send_agent_message"],
+      "builtin_sources": ["Telegram (via messaging-gateway)", "WhatsApp (via messaging-whatsapp-worker)"],
+      "replaces_mcp_keywords": [
+        "telegram bot", "whatsapp", "messaging",
+        "notification send", "chat message"
+      ],
+      "replaces_mcp_name_patterns": [
+        "telegram", "whatsapp", "messaging"
+      ],
+      "redundant_examples": []
+    },
+    "templating_render": {
+      "label": "Templating and Render",
+      "builtin_tools": ["render_template"],
+      "replaces_mcp_keywords": [
+        "template render", "mustache", "html template"
+      ],
+      "replaces_mcp_name_patterns": [],
+      "redundant_examples": []
+    }
+  }
+}
