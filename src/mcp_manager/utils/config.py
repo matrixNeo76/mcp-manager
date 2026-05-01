@@ -13,6 +13,10 @@ def find_mcp_config(path: str | None = None) -> Path:
         p = Path(env_path)
         if p.exists() and p.is_file():
             return p
+        raise FileNotFoundError(
+            f"MCP_CONFIG_PATH={env_path} — file not found. "
+            "Check the path or unset the variable to search from CWD."
+        )
 
     search_start = Path(path).resolve() if path else Path.cwd().resolve()
     # Search upward from the given directory

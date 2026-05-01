@@ -14,6 +14,20 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 CACHE_TTL = 300  # 5 minutes
 
+# GitHub rate limit tracking (updated from response headers)
+_rate_limit_remaining: int | None = None
+_rate_limit_limit: int | None = None
+
+
+def get_rate_limit_status() -> dict:
+    """Return current GitHub API rate limit status."""
+    return {
+        "remaining": _rate_limit_remaining,
+        "limit": _rate_limit_limit,
+        "has_token": bool(GITHUB_TOKEN),
+        "is_low": _rate_limit_remaining is not None and _rate_limit_remaining < 10,
+    }
+
 
 def _parse_github_repo(repository_url: str) -> tuple[str, str] | None:
     """Extract owner/repo from a GitHub URL. Returns None if not a GitHub URL."""
@@ -37,8 +51,12 @@ def _build_headers() -> dict[str, str]:
     return headers
 
 
-def fetch_repo_info(repository_url: str) -> dict[str, Any]:
+def fetch_repo_info(repository_url: str, force_refresh: bool = False) -> dict[str, Any]:
     """Fetch repository information from GitHub API.
+
+    Args:
+        repository_url: Full GitHub repository URL
+        force_refresh: If True, bypass in-memory cache
 
     Returns a dict with:
       - found: bool
@@ -55,7 +73,7 @@ def fetch_repo_info(repository_url: str) -> dict[str, Any]:
     # Check cache
     now = time.time()
     cached = _cache.get(repository_url)
-    if cached and (now - cached[0]) < CACHE_TTL:
+    if cached and (now - cached[0]) < CACHE_TTL and not force_refresh:
         return cached[1]
 
     owner_repo = _parse_github_repo(repository_url)
@@ -106,7 +124,7 @@ def fetch_repo_info(repository_url: str) -> dict[str, Any]:
                 "days_since_update": 9999,
                 "language": None,
                 "topics": [],
-                "error": "GitHub API rate limit exceeded. Set GITHUB_TOKEN for more requests.",
+                "error": f"GitHub API rate limit exceeded. Set GITHUB_TOKEN for 5,000 req/h instead of 60.",
             }
         elif resp.status_code != 200:
             result = {
@@ -160,6 +178,17 @@ def fetch_repo_info(repository_url: str) -> dict[str, Any]:
             "language": None, "topics": [],
             "error": str(e),
         }
+
+    # Track rate limit from response headers (if available)
+    try:
+        remaining = resp.headers.get("X-RateLimit-Remaining")
+        limit = resp.headers.get("X-RateLimit-Limit")
+        if remaining is not None:
+            _rate_limit_remaining = int(remaining)
+        if limit is not None:
+            _rate_limit_limit = int(limit)
+    except (NameError, AttributeError):
+        pass  # resp not defined (e.g., timeout or parse error)
 
     _cache[repository_url] = (time.time(), result)
     return result

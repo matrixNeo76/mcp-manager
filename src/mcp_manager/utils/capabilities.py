@@ -123,6 +123,29 @@ VALUE_CLASSIFICATION: list[dict[str, Any]] = [
             "google maps", "openstreetmap", "coordinates"
         ],
     },
+    # Analytics / Business Intelligence
+    {
+        "value_type": "analytics",
+        "value_score": 75,
+        "label": "📊  Analytics / BI",
+        "keywords": [
+            "analytics", "dashboard", "reporting", "business intelligence",
+            "bi tool", "kpi", "metric", "chart", "data viz",
+            "visualization", "insight", "data studio", "looker"
+        ],
+    },
+    # AI / Machine Learning
+    {
+        "value_type": "ai_ml",
+        "value_score": 85,
+        "label": "🤖  AI / ML",
+        "keywords": [
+            "inference", "embedding", "llm", "model serving",
+            "ml pipeline", "ai model", "machine learning",
+            "deep learning", "neural network", "vector embedding",
+            "model deploy", "training", "fine tuning"
+        ],
+    },
     # E-commerce / CMS
     {
         "value_type": "ecommerce_cms",
@@ -160,11 +183,14 @@ def compute_redundancy(server_name: str, description: str) -> dict[str, Any]:
             if pattern.lower() in name_lower:
                 score += 40
 
-        # Match by keywords (but skip if it's actually a cloud/infra name)
+        # Match by keywords (but skip false positives)
         for kw in cat_data.get("replaces_mcp_keywords", []):
             if kw.lower() in text:
                 # Special case: 'container' in a cloud/kubernetes context is NOT redundant
                 if kw == "container" and ("kubernetes" in text or "k8s" in text or "cloud" in text):
+                    continue
+                # Special case: 'code search' or 'semantic search' is NOT web search
+                if kw in ("search", "web search") and ("code search" in text or "semantic search" in text or "codebase search" in text):
                     continue
                 score += 15
 
@@ -220,19 +246,13 @@ def classify_value(server_name: str, description: str) -> dict[str, Any]:
     """Classify what VALUE an MCP server adds beyond pi's built-in capabilities.
 
     Returns:
-        value_type: str — category of value
+        value_type: str — primary category of value
         value_score: int — 0-100 how much value it adds
         value_label: str — human-readable label
         value_match_confidence: str — high/medium/low
+        value_types: list[str] — ALL matching categories (multi-label)
     """
     text = f"{server_name.lower()} {description.lower()}"
-
-    best = {
-        "value_type": "uncategorized",
-        "value_score": 30,
-        "value_label": "📦  Generico",
-        "value_match_confidence": "low",
-    }
 
     # First check if it's redundant — low value if so
     redundancy = compute_redundancy(server_name, description)
@@ -242,30 +262,50 @@ def classify_value(server_name: str, description: str) -> dict[str, Any]:
             "value_score": max(5, 30 - redundancy["redundancy_score"]),
             "value_label": "🔴  Ridondante (già in pi)",
             "value_match_confidence": "high",
+            "value_types": ["redundant"],
         }
 
+    # Collect ALL matching categories (multi-label)
+    matches: list[dict] = []
     for classification in VALUE_CLASSIFICATION:
-        value_type = classification["value_type"]
         keywords = classification["keywords"]
         match_count = sum(1 for kw in keywords if kw.lower() in text)
 
         if match_count >= 3:
-            best = {
-                "value_type": value_type,
+            matches.append({
+                "value_type": classification["value_type"],
                 "value_score": classification["value_score"],
                 "value_label": classification["label"],
                 "value_match_confidence": "high",
-            }
-            break
-        elif match_count >= 1 and classification["value_score"] > best["value_score"]:
-            best = {
-                "value_type": value_type,
-                "value_score": classification["value_score"] - 10,  # slight penalty
+            })
+        elif match_count >= 1:
+            matches.append({
+                "value_type": classification["value_type"],
+                "value_score": classification["value_score"] - 10,
                 "value_label": classification["label"],
                 "value_match_confidence": "medium",
-            }
+            })
 
-    return best
+    if not matches:
+        return {
+            "value_type": "uncategorized",
+            "value_score": 30,
+            "value_label": "📦  Generico",
+            "value_match_confidence": "low",
+            "value_types": [],
+        }
+
+    # Sort by score descending, pick best as primary
+    matches.sort(key=lambda x: (-x["value_score"], x["value_match_confidence"] == "high"))
+    primary = matches[0]
+
+    return {
+        "value_type": primary["value_type"],
+        "value_score": primary["value_score"],
+        "value_label": primary["value_label"],
+        "value_match_confidence": primary["value_match_confidence"],
+        "value_types": [m["value_type"] for m in matches],
+    }
 
 
 def compute_composite_score(
@@ -279,7 +319,13 @@ def compute_composite_score(
         trust (40%) — stars, recency, forks
         non-redundancy (30%) — pi non ha nulla di simile
         value (30%) — quanto valore aggiunge come integrazione esterna
+
+    If trust and value are both zero, composite is 0 (not 30 from non-redundancy)
+    to avoid misleading scores for unvetted servers.
     """
+    if trust_score == 0 and value_score == 0:
+        return 0.0
+
     non_redundancy = 100 - redundancy_score
     return round(
         trust_score * 0.40

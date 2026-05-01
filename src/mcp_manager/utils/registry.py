@@ -4,8 +4,11 @@ from typing import Any
 
 import httpx
 
+import os
+
 REGISTRY_BASE = "https://registry.modelcontextprotocol.io"
 REGISTRY_API = f"{REGISTRY_BASE}/v0.1"
+REGISTRY_TIMEOUT = int(os.environ.get("REGISTRY_TIMEOUT", "30"))
 
 
 def list_servers(
@@ -21,7 +24,7 @@ def list_servers(
     servers: list[dict[str, Any]] = []
     cursor: str | None = None
 
-    with httpx.Client(timeout=30) as client:
+    with httpx.Client(timeout=REGISTRY_TIMEOUT) as client:
         while len(servers) < limit:
             params: dict[str, Any] = {
                 "limit": min(100, limit - len(servers)),
@@ -92,7 +95,16 @@ def get_server_detail(server_name: str) -> dict[str, Any]:
 
     server_name should be URL-encoded (e.g., 'io.github.user%2Fmy-server').
     """
+    import re
     import urllib.parse
+
+    # Validate server name: only alphanumeric, dots, hyphens, slashes, underscores, colons
+    if not re.match(r'^[a-zA-Z0-9._\-/:]+$', server_name):
+        return {
+            "found": False,
+            "error": f"Invalid server name '{server_name}'. "
+            "Expected format: 'namespace/server-name' (alphanumeric, dots, hyphens).",
+        }
 
     encoded = urllib.parse.quote(server_name, safe="")
     # If the name already contains %2F, don't double-encode
@@ -101,7 +113,7 @@ def get_server_detail(server_name: str) -> dict[str, Any]:
 
     url = f"{REGISTRY_API}/servers/{encoded}/versions/latest"
 
-    with httpx.Client(timeout=15) as client:
+    with httpx.Client(timeout=REGISTRY_TIMEOUT) as client:
         resp = client.get(url)
 
     if resp.status_code == 404:
@@ -153,6 +165,7 @@ def get_server_detail(server_name: str) -> dict[str, Any]:
                 "version": p.get("version"),
                 "transport_type": p.get("transport", {}).get("type"),
                 "transport_url": p.get("transport", {}).get("url"),
+                "environment_variables": p.get("environmentVariables", []),
             }
             for p in packages
             if isinstance(p, dict)
@@ -181,7 +194,7 @@ def registry_health() -> dict[str, Any]:
 
     start = time.time()
     try:
-        with httpx.Client(timeout=10) as client:
+        with httpx.Client(timeout=REGISTRY_TIMEOUT) as client:
             health_resp = client.get(f"{REGISTRY_BASE}/v0.1/health")
             version_resp = client.get(f"{REGISTRY_BASE}/v0.1/version")
             count_resp = client.get(

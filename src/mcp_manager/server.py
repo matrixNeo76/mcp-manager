@@ -14,6 +14,7 @@ Tools:
   registry_health         — Health check of the MCP Registry
 """
 
+import asyncio
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -25,7 +26,7 @@ from mcp_manager.utils.capabilities import (
     get_redundancy_help,
 )
 from mcp_manager.utils.config import list_local_servers, write_mcp_config_entry
-from mcp_manager.utils.github import fetch_repo_info, compute_trust_score
+from mcp_manager.utils.github import fetch_repo_info, compute_trust_score, get_rate_limit_status
 from mcp_manager.utils.registry import (
     list_servers as registry_list,
     get_server_detail,
@@ -138,66 +139,93 @@ async def search_trusted(
 ) -> list[dict[str, Any]]:
     """Search registry and evaluate trust + redundancy for each result."""
     servers = registry_list(search=query, limit=limit, version="latest")
-    return _enrich_with_scores(servers, min_stars, filter_untrusted)
+    return await _enrich_with_scores(servers, min_stars, filter_untrusted)
 
 
-def _enrich_with_scores(
+async def _enrich_with_scores(
     servers: list[dict],
     min_stars: int = 10,
     filter_untrusted: bool = False,
 ) -> list[dict[str, Any]]:
-    """Enrich registry servers with trust, redundancy, value, and composite scores."""
-    results = []
+    """Enrich registry servers with trust, redundancy, value, and composite scores.
+
+    Trust evaluation runs in parallel via asyncio.gather (max 5 concurrent)
+    to minimize GitHub API latency.
+    """
+    # Phase 1: compute redundancy + value (synchronous, no network)
     for sv in servers:
-        entry: dict[str, Any] = {**sv}
         name = sv.get("name", "")
         desc = sv.get("description", "")
-
-        # 1) Trust score
-        repo_url = sv.get("repository_url")
-        if repo_url:
-            repo_info = fetch_repo_info(repo_url)
-            entry["repo_info"] = repo_info
-            entry["stars"] = repo_info.get("stars", 0)
-            entry["forks"] = repo_info.get("forks", 0)
-            entry["days_since_update"] = repo_info.get("days_since_update", 9999)
-            if repo_info["found"]:
-                score = compute_trust_score(repo_info, min_stars=min_stars)
-                trust_score = score["trust_score"]
-                entry["trust_score"] = trust_score
-                entry["is_trusted"] = score["is_trusted"]
-                entry["trust_warnings"] = score["warnings"]
-            else:
-                trust_score = 0
-                entry["trust_score"] = 0
-                entry["is_trusted"] = False
-                entry["trust_warnings"] = [repo_info.get("error", "Unknown error")]
-        else:
-            trust_score = 0
-            entry["trust_score"] = 0
-            entry["is_trusted"] = False
-            entry["trust_warnings"] = ["No GitHub repository URL in registry"]
-
-        # 2) Redundancy & value scores
         redundancy = compute_redundancy(name, desc)
         value = classify_value(name, desc)
-        entry["redundancy_score"] = redundancy["redundancy_score"]
-        entry["redundant"] = redundancy["redundant"]
-        entry["redundant_category"] = redundancy["redundant_category"]
-        entry["redundant_reason"] = redundancy["redundant_reason"]
-        entry["value_type"] = value["value_type"]
-        entry["value_score"] = value["value_score"]
-        entry["value_label"] = value["value_label"]
-        entry["value_match_confidence"] = value["value_match_confidence"]
+        sv["_redundancy"] = redundancy
+        sv["_value"] = value
 
-        # 3) Composite score
+    # Phase 2: fetch trust info in parallel (network-bound)
+    sem = asyncio.Semaphore(5)  # max 5 concurrent requests
+
+    async def _fetch_trust(sv: dict) -> dict:
+        async with sem:
+            repo_url = sv.get("repository_url")
+            if not repo_url:
+                return {"trust_score": 0, "is_trusted": False, "trust_warnings": ["No GitHub repository URL in registry"],
+                        "stars": 0, "forks": 0, "days_since_update": 9999}
+            # fetch_repo_info is sync — run in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            repo_info = await loop.run_in_executor(None, fetch_repo_info, repo_url)
+            result = {"repo_info": repo_info}
+            result["stars"] = repo_info.get("stars", 0)
+            result["forks"] = repo_info.get("forks", 0)
+            result["days_since_update"] = repo_info.get("days_since_update", 9999)
+            if repo_info["found"]:
+                score = compute_trust_score(repo_info, min_stars=min_stars)
+                result["trust_score"] = score["trust_score"]
+                result["is_trusted"] = score["is_trusted"]
+                result["trust_warnings"] = score["warnings"]
+            else:
+                result["trust_score"] = 0
+                result["is_trusted"] = False
+                result["trust_warnings"] = [repo_info.get("error", "Unknown error")]
+            return result
+
+    trust_results = await asyncio.gather(*[_fetch_trust(sv) for sv in servers])
+
+    # Phase 3: combine everything into final entries
+    results = []
+    for sv, trust in zip(servers, trust_results):
+        redundancy = sv["_redundancy"]
+        value = sv["_value"]
+
+        entry: dict[str, Any] = {
+            "name": sv.get("name", ""),
+            "title": sv.get("title"),
+            "description": sv.get("description", ""),
+            "version": sv.get("version", ""),
+            "repository_url": sv.get("repository_url"),
+            "status": sv.get("status", "unknown"),
+            **trust,
+            "redundancy_score": redundancy["redundancy_score"],
+            "redundant": redundancy["redundant"],
+            "redundant_category": redundancy["redundant_category"],
+            "redundant_reason": redundancy["redundant_reason"],
+            "value_type": value["value_type"],
+            "value_score": value["value_score"],
+            "value_label": value["value_label"],
+            "value_match_confidence": value["value_match_confidence"],
+        }
+
         entry["composite_score"] = compute_composite_score(
-            trust_score=trust_score,
+            trust_score=entry["trust_score"],
             redundancy_score=redundancy["redundancy_score"],
             value_score=value["value_score"],
         )
 
         results.append(entry)
+
+    # Attach rate limit warning if low
+    rl = get_rate_limit_status()
+    if rl["is_low"]:
+        _attach_rate_warning(results, rl)
 
     # Sort by composite_score descending
     results.sort(key=lambda x: x.get("composite_score", 0), reverse=True)
@@ -206,6 +234,19 @@ def _enrich_with_scores(
         results = [r for r in results if r.get("is_trusted", False)]
 
     return results
+
+
+def _attach_rate_warning(results: list[dict], rl: dict) -> None:
+    """Attach a rate limit warning to the first result's warnings."""
+    if not results:
+        return
+    msg = (
+        f"⚠️  GitHub API rate limit basso: {rl.get('remaining', '?')}/{rl.get('limit', '?')} richieste rimaste. "
+        "Imposta GITHUB_TOKEN per 5.000 req/h."
+    )
+    warnings = results[0].setdefault("trust_warnings", [])
+    if msg not in warnings:
+        warnings.insert(0, msg)
 
 
 # ============================ MICROFASE 5 (NEW) =============================
@@ -226,7 +267,7 @@ async def search_useful(
 ) -> list[dict[str, Any]]:
     """Search for MCP servers that add real value beyond pi's built-in capabilities."""
     servers = registry_list(search=query, limit=limit, version="latest")
-    enriched = _enrich_with_scores(servers, min_stars, filter_untrusted)
+    enriched = await _enrich_with_scores(servers, min_stars, filter_untrusted)
 
     if not include_redundant:
         enriched = [e for e in enriched if not e.get("redundant", False)]
@@ -281,12 +322,39 @@ async def gen_config(
                     "command": "uvx" if version else "python",
                     "args": [f"{identifier}=={version}"] if version else ["-m", identifier.replace("-", "_")],
                 }
+            elif registry_type == "oci":
+                # OCI container images — run via docker/podman
+                entry = {
+                    "command": "docker",
+                    "args": ["run", "-i", "--rm", identifier],
+                }
+            elif registry_type == "nuget":
+                # .NET tools
+                entry = {
+                    "command": "dotnet",
+                    "args": ["tool", "run", "--global", identifier],
+                }
+            elif registry_type == "mcpb":
+                # MCP Bundle — download and execute directly
+                entry = {
+                    "command": identifier,  # URL or path to the bundle
+                    "args": [],
+                }
             else:
                 entry = {
                     "command": "npx",
                     "args": ["-y", identifier],
                 }
-            entry["env"] = {}
+            # Extract environment variables from package definition
+            env_vars = stdio_pkg.get("environment_variables", [])
+            if env_vars:
+                entry["env"] = {
+                    ev["name"]: "${" + ev["name"] + "}"  # placeholder for user to fill
+                    for ev in env_vars
+                    if isinstance(ev, dict) and ev.get("name")
+                }
+            else:
+                entry["env"] = {}
         else:
             entry = {
                 "command": "npx",
@@ -372,7 +440,7 @@ async def audit_workspace() -> dict[str, Any]:
         }
 
         # 1) Check registry
-        registry_results = registry_list(search=name, limit=3, version="latest")
+        registry_results = registry_list(search=name, limit=10, version="latest")
         match = None
         for r in registry_results:
             if name.lower() in r.get("name", "").lower():

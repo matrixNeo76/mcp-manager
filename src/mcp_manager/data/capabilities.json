@@ -103,12 +103,10 @@
       "label": "Code Analysis",
       "builtin_tools": ["grep", "find"],
       "replaces_mcp_keywords": [
-        "code search", "grep", "code analysis", "static analysis",
-        "codebase search", "semantic code search",
-        "code insight", "code understanding"
+        "grep", "code analysis", "static analysis"
       ],
       "replaces_mcp_name_patterns": [
-        "code-search", "codesearch", "grep-"
+        "grep-"
       ],
       "redundant_examples": []
     },
