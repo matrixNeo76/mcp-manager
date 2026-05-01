@@ -67,10 +67,25 @@ mcp-manager/
 
 ## Environment Variables
 
-- `GITHUB_TOKEN` — optional, for 5,000 req/h GitHub API (default: 60 req/h)
-- `MCP_CONFIG_PATH` — optional, override `.mcp.json` location
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GITHUB_TOKEN` | — | 5,000 req/h GitHub API (default: 60) |
+| `GITHUB_TIMEOUT` | 15 | GitHub API timeout in seconds |
+| `REGISTRY_TIMEOUT` | 30 | MCP Registry API timeout |
+| `REGISTRY_API_VERSION` | v0.1 | Registry API version |
+| `MCP_CONFIG_PATH` | — | Override `.mcp.json` location |
 
-## Current Tools (10)
+## Testing
+
+```bash
+# Unit tests (62 tests, no network)
+uv run python -m pytest tests/ -v
+
+# Smoke test (network required)
+uv run python scripts/smoke_test.py
+```
+
+## Current Tools (11)
 
 1. list_local_servers
 2. search_registry
@@ -82,3 +97,4 @@ mcp-manager/
 8. compare_alternatives
 9. audit_workspace_mcp
 10. registry_health
+11. pi_capabilities
