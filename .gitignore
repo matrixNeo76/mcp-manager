@@ -5,9 +5,9 @@
 __pycache__/
 *.pyc
 *.pyo
-*.egg-info/
 
 # Build artifacts
+*.egg-info/
 dist/
 build/
 
@@ -18,5 +18,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Temporary scripts
+_fix_emoji.py
 
 # UV lock is tracked (it's a project dep file)

@@ -14,6 +14,9 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 CACHE_TTL = 300  # 5 minutes
 
+# Configurable timeout (env override)
+GITHUB_TIMEOUT = int(os.environ.get("GITHUB_TIMEOUT", "15"))
+
 # GitHub rate limit tracking (updated from response headers)
 _rate_limit_remaining: int | None = None
 _rate_limit_limit: int | None = None
@@ -97,7 +100,7 @@ def fetch_repo_info(repository_url: str, force_refresh: bool = False) -> dict[st
     url = f"{GITHUB_API}/repos/{owner}/{repo}"
 
     try:
-        with httpx.Client(timeout=15) as client:
+        with httpx.Client(timeout=GITHUB_TIMEOUT) as client:
             resp = client.get(url, headers=_build_headers())
 
         if resp.status_code == 404:

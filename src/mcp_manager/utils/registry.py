@@ -7,7 +7,8 @@ import httpx
 import os
 
 REGISTRY_BASE = "https://registry.modelcontextprotocol.io"
-REGISTRY_API = f"{REGISTRY_BASE}/v0.1"
+REGISTRY_API_VERSION = os.environ.get("REGISTRY_API_VERSION", "v0.1")
+REGISTRY_API = f"{REGISTRY_BASE}/{REGISTRY_API_VERSION}"
 REGISTRY_TIMEOUT = int(os.environ.get("REGISTRY_TIMEOUT", "30"))
 
 
