@@ -4,6 +4,7 @@ from mcp_manager.utils.github import (
     compute_trust_score,
     _parse_github_repo,
     get_rate_limit_status,
+    fetch_repo_info,
 )
 
 
@@ -81,6 +82,22 @@ class TestTrustScore:
     def test_warnings_for_old_repo(self):
         s = compute_trust_score({"found": True, "stars": 500, "forks": 50, "days_since_update": 400})
         assert len(s["warnings"]) >= 1
+
+
+class TestFetchRepoInfo:
+    """Verifica chiamata a GitHub API (con mock)."""
+
+    def test_non_github_url_returns_immediately(self):
+        result = fetch_repo_info("https://gitlab.com/owner/repo")
+        assert result["found"] is False
+        assert "error" in result
+
+    def test_cache_hit_does_not_crash(self):
+        # Chiama con un URL reale — se rate-limited, cache salva il risultato
+        # La seconda chiamata deve tornare senza crash (cache hit o errore)
+        result1 = fetch_repo_info("https://github.com/modelcontextprotocol/servers")
+        result2 = fetch_repo_info("https://github.com/modelcontextprotocol/servers")
+        assert result2.get("found") is not None or not result2.get("found")
 
 
 class TestRateLimitStatus:

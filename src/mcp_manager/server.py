@@ -14,10 +14,13 @@ Tools:
  registry_health     — Health check of the MCP Registry
 """
 
+import argparse
 import asyncio
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+
+from mcp_manager import __version__
 
 from mcp_manager.utils.capabilities import (
   compute_redundancy,
@@ -240,8 +243,10 @@ def _attach_rate_warning(results: list[dict], rl: dict) -> None:
   """Attach a rate limit warning to the first result's warnings."""
   if not results:
     return
+  reset_min = rl.get("resets_in_minutes")
+  reset_part = f" Resetta tra ~{reset_min}min." if reset_min else ""
   msg = (
-    f" GitHub API rate limit basso: {rl.get('remaining', '?')}/{rl.get('limit', '?')} richieste rimaste. "
+    f" GitHub API rate limit basso: {rl.get('remaining', '?')}/{rl.get('limit', '?')} richieste.{reset_part} "
     "Imposta GITHUB_TOKEN per 5.000 req/h."
   )
   warnings = results[0].setdefault("trust_warnings", [])
@@ -575,7 +580,31 @@ async def pi_caps() -> str:
 
 def main() -> None:
   """Entry point for mcp-manager."""
-  server.run()
+  parser = argparse.ArgumentParser(
+    description="MCP Manager — discover, evaluate, and manage MCP servers",
+  )
+  parser.add_argument(
+    "--version", action="version",
+    version=f"mcp-manager v{__version__}",
+  )
+  parser.add_argument(
+    "--http", action="store_true",
+    help="Run as HTTP server instead of stdio (default: stdio)",
+  )
+  parser.add_argument(
+    "--port", type=int, default=8000,
+    help="HTTP port (default: 8000)",
+  )
+  parser.add_argument(
+    "--host", type=str, default="127.0.0.1",
+    help="HTTP host (default: 127.0.0.1)",
+  )
+  args = parser.parse_args()
+
+  if args.http:
+    server.run(host=args.host, port=args.port)
+  else:
+    server.run()
 
 
 if __name__ == "__main__":

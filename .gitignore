@@ -19,7 +19,4 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Temporary scripts
-_fix_emoji.py
-
 # UV lock is tracked (it's a project dep file)

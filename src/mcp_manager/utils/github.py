@@ -12,7 +12,7 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 # Simple in-memory cache: repo_url -> (timestamp, data)
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = int(os.environ.get("GITHUB_CACHE_TTL", "300"))  # seconds, default 5 min
 
 # Configurable timeout (env override)
 GITHUB_TIMEOUT = int(os.environ.get("GITHUB_TIMEOUT", "15"))
@@ -20,13 +20,19 @@ GITHUB_TIMEOUT = int(os.environ.get("GITHUB_TIMEOUT", "15"))
 # GitHub rate limit tracking (updated from response headers)
 _rate_limit_remaining: int | None = None
 _rate_limit_limit: int | None = None
+_rate_limit_reset: int | None = None  # Unix timestamp when limit resets
 
 
 def get_rate_limit_status() -> dict:
     """Return current GitHub API rate limit status."""
+    resets_in = None
+    if _rate_limit_reset is not None:
+        resets_in = max(0, _rate_limit_reset - int(time.time()))
     return {
         "remaining": _rate_limit_remaining,
         "limit": _rate_limit_limit,
+        "resets_in_seconds": resets_in,
+        "resets_in_minutes": round(resets_in / 60, 1) if resets_in is not None else None,
         "has_token": bool(GITHUB_TOKEN),
         "is_low": _rate_limit_remaining is not None and _rate_limit_remaining < 10,
     }
@@ -186,10 +192,13 @@ def fetch_repo_info(repository_url: str, force_refresh: bool = False) -> dict[st
     try:
         remaining = resp.headers.get("X-RateLimit-Remaining")
         limit = resp.headers.get("X-RateLimit-Limit")
+        reset = resp.headers.get("X-RateLimit-Reset")
         if remaining is not None:
             _rate_limit_remaining = int(remaining)
         if limit is not None:
             _rate_limit_limit = int(limit)
+        if reset is not None:
+            _rate_limit_reset = int(reset)
     except (NameError, AttributeError):
         pass  # resp not defined (e.g., timeout or parse error)
 

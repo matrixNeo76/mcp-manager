@@ -82,7 +82,14 @@ def write_mcp_config_entry(
     If dry_run=True (default), return the diff without writing.
     If dry_run=False, write to disk.
     """
-    config_path = find_mcp_config(path)
+    try:
+        config_path = find_mcp_config(path)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "Cannot write config: no .mcp.json found. "
+            "Run from a project directory containing .mcp.json "
+            "or set the MCP_CONFIG_PATH environment variable."
+        )
     raw = config_path.read_text(encoding="utf-8")
     data: dict = json.loads(raw)
 
@@ -102,7 +109,7 @@ def write_mcp_config_entry(
         }
 
     config_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(data, indent=2, ensure_ascii=True) + "\n",
         encoding="utf-8",
     )
     return {

@@ -6,10 +6,14 @@ and how much value it adds (what pi CAN'T do).
 
 import json
 import re
+import warnings
 from pathlib import Path
 from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Expected capabilities.json version (increment when adding/removing categories)
+CAPABILITIES_VERSION = 2
 
 # Cache capabilities
 _caps: dict | None = None
@@ -21,7 +25,18 @@ def _load_capabilities() -> dict:
     return _caps
   path = DATA_DIR / "capabilities.json"
   with open(path, encoding="utf-8") as f:
-    _caps = json.load(f)
+    data = json.load(f)
+
+  # Version check
+  meta = data.get("_meta", {})
+  ver = meta.get("version")
+  if ver is not None and ver != CAPABILITIES_VERSION:
+    warnings.warn(
+      f"capabilities.json version {ver} != expected {CAPABILITIES_VERSION}. "
+      "Update CAPABILITIES_VERSION in capabilities.py to match."
+    )
+
+  _caps = data
   return _caps
 
 
