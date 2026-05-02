@@ -1,0 +1,17 @@
+# Each line is a file pattern followed by one or more owners.
+# Order matters: the last matching pattern takes precedence.
+
+# Default: project owner reviews everything
+* @matrixNeo76
+
+# Core source code
+/src/mcp_manager/ @matrixNeo76
+
+# Tests
+/tests/ @matrixNeo76
+
+# Documentation
+*.md @matrixNeo76
+
+# CI/CD
+/.github/ @matrixNeo76
