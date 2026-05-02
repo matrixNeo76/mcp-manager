@@ -1,15 +1,19 @@
 """MCP Registry API client (registry.modelcontextprotocol.io)."""
 
+import os
+import time
 from typing import Any
 
 import httpx
-
-import os
 
 REGISTRY_BASE = "https://registry.modelcontextprotocol.io"
 REGISTRY_API_VERSION = os.environ.get("REGISTRY_API_VERSION", "v0.1")
 REGISTRY_API = f"{REGISTRY_BASE}/{REGISTRY_API_VERSION}"
 REGISTRY_TIMEOUT = int(os.environ.get("REGISTRY_TIMEOUT", "30"))
+REGISTRY_CACHE_TTL = int(os.environ.get("REGISTRY_CACHE_TTL", "60"))  # seconds
+
+# In-memory cache for registry API results
+_cache_registry: dict[str, tuple[float, list[dict]]] = {}
 
 
 def list_servers(
@@ -22,6 +26,13 @@ def list_servers(
 
     Returns a flat list of server entries with registry metadata.
     """
+    # Check cache
+    cache_key = f"{search}:{limit}:{version}:{updated_since}"
+    now = time.time()
+    cached = _cache_registry.get(cache_key)
+    if cached and (now - cached[0]) < REGISTRY_CACHE_TTL:
+        return cached[1]
+
     servers: list[dict[str, Any]] = []
     cursor: str | None = None
 
@@ -88,7 +99,10 @@ def list_servers(
             if not cursor:
                 break
 
-    return servers[:limit]
+    result = servers[:limit]
+    # Cache before returning
+    _cache_registry[cache_key] = (time.time(), result)
+    return result
 
 
 def get_server_detail(server_name: str) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 """GitHub API client for evaluating repository trustworthiness."""
 
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -17,25 +18,45 @@ CACHE_TTL = int(os.environ.get("GITHUB_CACHE_TTL", "300"))  # seconds, default 5
 # Configurable timeout (env override)
 GITHUB_TIMEOUT = int(os.environ.get("GITHUB_TIMEOUT", "15"))
 
-# GitHub rate limit tracking (updated from response headers)
-_rate_limit_remaining: int | None = None
-_rate_limit_limit: int | None = None
-_rate_limit_reset: int | None = None  # Unix timestamp when limit resets
+# GitHub rate limit tracking (thread-safe)
+class _RateLimitTracker:
+    """Thread-safe tracker for GitHub API rate limits."""
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._remaining: int | None = None
+        self._limit: int | None = None
+        self._reset: int | None = None
+
+    def update(self, remaining=None, limit=None, reset=None):
+        with self._lock:
+            if remaining is not None:
+                self._remaining = int(remaining)
+            if limit is not None:
+                self._limit = int(limit)
+            if reset is not None:
+                self._reset = int(reset)
+
+    def status(self) -> dict:
+        with self._lock:
+            resets_in = None
+            if self._reset is not None:
+                resets_in = max(0, self._reset - int(time.time()))
+            return {
+                "remaining": self._remaining,
+                "limit": self._limit,
+                "resets_in_seconds": resets_in,
+                "resets_in_minutes": round(resets_in / 60, 1) if resets_in is not None else None,
+                "has_token": bool(GITHUB_TOKEN),
+                "is_low": self._remaining is not None and self._remaining < 10,
+            }
+
+
+_rate_limit = _RateLimitTracker()
 
 
 def get_rate_limit_status() -> dict:
     """Return current GitHub API rate limit status."""
-    resets_in = None
-    if _rate_limit_reset is not None:
-        resets_in = max(0, _rate_limit_reset - int(time.time()))
-    return {
-        "remaining": _rate_limit_remaining,
-        "limit": _rate_limit_limit,
-        "resets_in_seconds": resets_in,
-        "resets_in_minutes": round(resets_in / 60, 1) if resets_in is not None else None,
-        "has_token": bool(GITHUB_TOKEN),
-        "is_low": _rate_limit_remaining is not None and _rate_limit_remaining < 10,
-    }
+    return _rate_limit.status()
 
 
 def _parse_github_repo(repository_url: str) -> tuple[str, str] | None:
@@ -193,12 +214,7 @@ def fetch_repo_info(repository_url: str, force_refresh: bool = False) -> dict[st
         remaining = resp.headers.get("X-RateLimit-Remaining")
         limit = resp.headers.get("X-RateLimit-Limit")
         reset = resp.headers.get("X-RateLimit-Reset")
-        if remaining is not None:
-            _rate_limit_remaining = int(remaining)
-        if limit is not None:
-            _rate_limit_limit = int(limit)
-        if reset is not None:
-            _rate_limit_reset = int(reset)
+        _rate_limit.update(remaining=remaining, limit=limit, reset=reset)
     except (NameError, AttributeError):
         pass  # resp not defined (e.g., timeout or parse error)
 
