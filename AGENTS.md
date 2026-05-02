@@ -10,6 +10,8 @@ This file provides context and instructions for any AI agent (Claude, Copilot, C
 - **Language**: Python 3.12+
 - **Framework**: FastMCP (via `mcp[cli]`)
 - **Package Manager**: `uv`
+- **Version**: 0.4.0
+- **Tests**: 70 unit tests (5 files) + smoke test + CI
 
 ## Key Files
 

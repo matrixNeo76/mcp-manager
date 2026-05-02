@@ -4,7 +4,7 @@
 
 MCP Manager is an MCP server that acts as a **governance and discovery hub** for your entire MCP ecosystem. It finds new MCP servers, evaluates trustworthiness, checks if they add real value beyond pi's built-in capabilities, and generates ready-to-use configuration.
 
-**v0.3.0** — [11 tools](.), [62 unit tests](. ), [10 value categories](. ) | [matrixNeo76/mcp-manager](https://github.com/matrixNeo76/mcp-manager)
+**v0.4.0** — [11 tools](.), [70 unit tests](. ), [12 value categories](. ) | [matrixNeo76/mcp-manager](https://github.com/matrixNeo76/mcp-manager)
 
 ---
 
@@ -63,7 +63,7 @@ mcp-manager
 }
 ```
 
-> **Tip:** Set `GITHUB_TOKEN` in your environment for 5,000 API requests/hour instead of 60.
+> **Tip:** Set `GITHUB_TOKEN` in your environment for 5,000 API requests/hour instead of 60. See the env vars table below for all configurable options.
 
 ---
 
@@ -186,9 +186,9 @@ uv run python scripts/smoke_test.py
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GITHUB_TOKEN` | — | GitHub API token (5,000 req/h instead of 60) |
 | `GITHUB_TIMEOUT` | 15 | GitHub API timeout in seconds |
 | `GITHUB_CACHE_TTL` | 300 | GitHub API cache TTL in seconds (default: 5 min) |
+| `GITHUB_TOKEN` | — | GitHub API token (5,000 req/h instead of 60) |
 | `REGISTRY_TIMEOUT` | 30 | MCP Registry API timeout in seconds |
 | `REGISTRY_API_VERSION` | v0.1 | Registry API version (future-proof) |
 | `MCP_CONFIG_PATH` | — | Override `.mcp.json` location |
@@ -200,7 +200,7 @@ uv run python scripts/smoke_test.py
 ```
 mcp-manager/
 |-- src/mcp_manager/
-|   |-- __init__.py         # Package version (0.3.0)
+|   |-- __init__.py         # Package version (0.4.0)
 |   |-- server.py           # FastMCP server with 11 tools
 |   |-- py.typed            # PEP 561 marker
 |   |-- data/
@@ -214,6 +214,7 @@ mcp-manager/
 |   |-- test_capabilities.py  # 25 tests
 |   |-- test_github.py        # 18 tests
 |   |-- test_config.py        # 13 tests
+|   |-- test_registry.py      # 8 tests
 |   +-- test_server.py        # 6 tests
 |-- scripts/
 |   +-- smoke_test.py       # End-to-end verification

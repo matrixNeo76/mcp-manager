@@ -2,6 +2,8 @@
 
 ## Project Overview
 
+**v0.4.0** — 11 tools, 70 unit tests, 12 value categories, CI pipeline.
+
 MCP Manager is a Python MCP server that helps discover, evaluate, and manage MCP servers. It searches the official MCP Registry, evaluates trust via GitHub, and filters out servers that duplicate functionality already built into pi/Craft Agents.
 
 ## Quick Commands
@@ -11,20 +13,19 @@ MCP Manager is a Python MCP server that helps discover, evaluate, and manage MCP
 uv sync
 uv pip install -e .
 
-# Run
-python -m mcp_manager.server
+# Run (stdio)
+python -m mcp_manager
 
-# Test tools
-python -c "
-import asyncio
-from mcp_manager.server import server
-async def main():
-    tools = await server.list_tools()
-    print(f'{len(tools)} tools registered')
-    for t in sorted(tools, key=lambda x: x.name):
-        print(f'  - {t.name}')
-asyncio.run(main())
-"
+# CLI flags
+python -m mcp_manager --version
+python -m mcp_manager --help
+
+# Run tests
+uv run python -m pytest tests/ -v
+
+# Smoke test
+uv run python scripts/smoke_test.py
+```
 ```
 
 ## Project Structure
