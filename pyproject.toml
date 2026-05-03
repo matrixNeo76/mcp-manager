@@ -34,7 +34,7 @@ Changelog = "https://github.com/matrixNeo76/mcp-manager/blob/main/CHANGELOG.md"
 mcp-manager = "mcp_manager.server:main"
 
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
 [tool.uv]
