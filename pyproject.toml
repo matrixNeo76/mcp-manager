@@ -44,4 +44,4 @@ package = true
 testpaths = ["tests"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=9.0.3"]
